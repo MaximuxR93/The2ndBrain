@@ -203,6 +203,6 @@ Do NOT say "Based on the context" — just answer directly.`;
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`\n🧠 SecondBrain backend v3.0`);
-  console.log(`   http://127.0.0.1:${PORT}`);
+  console.log(`   http://0.0.0.0:${PORT}`);
   console.log(`   Providers: groq · openai · anthropic · openrouter · grok\n`);
 });
