@@ -42,7 +42,11 @@ function buildContext(content: string, query: string): string {
     .map((c, i) => ({ c, score: scoreChunk(c, query) + (i === 0 ? 0.5 : 0) }))
     .sort((a, b) => b.score - a.score);
 
-  const top = [...new Set([ranked[0].c, ...ranked.slice(0, 3).map((r) => r.c)])];
+  const topSet = new Set<string>();
+const top: string[] = [];
+[ranked[0].c, ...ranked.slice(0, 3).map((r) => r.c)].forEach((c) => {
+  if (!topSet.has(c)) { topSet.add(c); top.push(c); }
+});
   return top.join("\n\n---\n\n");
 }
 
