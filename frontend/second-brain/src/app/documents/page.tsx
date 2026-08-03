@@ -4,22 +4,22 @@ import { useState, useCallback } from "react";
 import { useStore } from "@/store/useStore";
 import { useRouter } from "next/navigation";
 import {
-  UploadCloud, FileText, CheckCircle2, ArrowRight,
+  UploadCloud, FileText, CheckCircle2,
   Loader2, Trash2, MessageSquare, Clock, Hash, AlertTriangle,
 } from "lucide-react";
 
 const ALLOWED = [".pdf", ".docx", ".txt", ".csv", ".md"] as const;
 const MAX_MB   = 20;
 
-const EXT_STYLE: Record<string, string> = {
-  ".pdf":  "bg-red-500/10    text-red-400    border-red-500/20",
-  ".docx": "bg-blue-500/10   text-blue-400   border-blue-500/20",
-  ".txt":  "bg-zinc-500/10   text-zinc-400   border-zinc-500/20",
-  ".csv":  "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
-  ".md":   "bg-amber-500/10  text-amber-400  border-amber-500/20",
+const EXT_INLINE: Record<string, { text: string; bg: string; border: string }> = {
+  ".pdf":  { text: "#EF4444", bg: "rgba(239,68,68,0.10)",  border: "rgba(239,68,68,0.20)" },
+  ".docx": { text: "#3B82F6", bg: "rgba(59,130,246,0.10)", border: "rgba(59,130,246,0.20)" },
+  ".txt":  { text: "#7E8090", bg: "rgba(126,128,144,0.10)",border: "rgba(126,128,144,0.20)" },
+  ".csv":  { text: "#22C55E", bg: "rgba(34,197,94,0.10)",  border: "rgba(34,197,94,0.20)" },
+  ".md":   { text: "#F59E0B", bg: "rgba(245,158,11,0.10)", border: "rgba(245,158,11,0.20)" },
 };
 
-function ext(name: string) { return name.slice(name.lastIndexOf(".")).toLowerCase(); }
+function getExt(name: string) { return name.slice(name.lastIndexOf(".")).toLowerCase(); }
 function fmtDate(ts: number) {
   return new Intl.DateTimeFormat("en", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(ts));
 }
@@ -31,25 +31,21 @@ function fmtWords(n?: number) {
 export default function DocumentsPage() {
   const { documents, addDocument, selectDoc, selectedDoc, removeDocument } = useStore();
   const router = useRouter();
-  const [loading,   setLoading]   = useState(false);
-  const [dragOver,  setDragOver]  = useState(false);
-  const [error,     setError]     = useState("");
-  const [progress,  setProgress]  = useState("");
+  const [loading,  setLoading]  = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const [error,    setError]    = useState("");
+  const [progress, setProgress] = useState("");
 
   const API = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:5000";
 
   const processFile = useCallback(async (file: File) => {
-    setError("");
-    setProgress("");
-
-    const e = ext(file.name);
+    setError(""); setProgress("");
+    const e = getExt(file.name);
     if (!ALLOWED.includes(e as any)) { setError(`"${e}" not supported. Use: ${ALLOWED.join(", ")}`); return; }
     if (file.size > MAX_MB * 1024 * 1024) { setError(`File exceeds ${MAX_MB} MB limit.`); return; }
     if (documents.some((d) => d.name === file.name)) { setError(`"${file.name}" is already uploaded.`); return; }
 
-    setLoading(true);
-    setProgress("Uploading…");
-
+    setLoading(true); setProgress("Uploading…");
     const form = new FormData();
     form.append("file", file);
 
@@ -57,166 +53,168 @@ export default function DocumentsPage() {
       const res  = await fetch(`${API}/upload`, { method: "POST", body: form });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Upload failed");
-
       const content = (data.text || "").trim();
       if (!content) { setError("No readable text found in this file."); setLoading(false); setProgress(""); return; }
-
       setProgress("Indexing…");
       const wordCount = content.split(/\s+/).filter(Boolean).length;
-
       addDocument({
-        id:        `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        name:      file.name,
-        content,            // ← full content, never truncated
-        wordCount,
-        charCount: content.length,
-        fileType:  e,
+        id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        name: file.name, content, wordCount,
+        charCount: content.length, fileType: e,
       });
       setProgress("");
     } catch (err: any) {
       setError(err.message || "Upload failed. Is the backend running?");
     }
-
     setLoading(false);
   }, [documents, addDocument, API]);
 
   return (
-    <div className="max-w-4xl mx-auto px-6 py-8">
+    <div className="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-10">
 
-      {/* Header */}
-      <header className="mb-7">
-        <h1 className="text-2xl font-bold text-white tracking-tight">Documents</h1>
-        <p className="text-zinc-600 text-[13px] mt-1">
+      {/* ── Header ── */}
+      <header className="mb-6 sm:mb-8 opacity-0 animate-fade-up delay-0">
+        <h1 className="text-[28px] sm:text-[36px] lg:text-[42px] font-bold text-white tracking-[-0.04em] leading-[1.1]">
+          Documents
+        </h1>
+        <p className="text-[13px] sm:text-[15px] lg:text-[16px] text-[#7E8090] mt-2 sm:mt-3 leading-[1.6]">
           Full document content is stored and used for RAG retrieval — no truncation.
         </p>
       </header>
 
-      {/* Drop zone */}
-      <label
-        htmlFor="file-input"
-        onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={(e) => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files[0]; if (f) processFile(f); }}
-        className={`flex flex-col items-center justify-center w-full h-44 rounded-2xl border-2 border-dashed cursor-pointer transition-all duration-200 mb-3 select-none ${
-          loading   ? "opacity-50 pointer-events-none border-white/10 bg-white/[0.01]" :
-          dragOver  ? "border-violet-500/70 bg-violet-500/[0.07] shadow-[0_0_40px_rgba(139,92,246,0.12)]" :
-                      "border-white/[0.08] bg-white/[0.01] hover:border-violet-500/40 hover:bg-violet-500/[0.04]"
-        }`}
-      >
-        <div className="flex flex-col items-center gap-3 pointer-events-none">
-          {loading ? (
-            <>
-              <Loader2 className="w-10 h-10 text-violet-400 animate-spin" />
-              <p className="text-[13px] text-zinc-500">{progress}</p>
-            </>
-          ) : (
-            <>
-              <div className={`p-3.5 rounded-2xl border transition-all ${dragOver ? "bg-violet-500/15 border-violet-500/30" : "bg-white/[0.04] border-white/[0.07]"}`}>
-                <UploadCloud size={22} className={dragOver ? "text-violet-400" : "text-zinc-600"} />
-              </div>
-              <div className="text-center">
-                <p className="text-[13px] font-medium text-zinc-400">
-                  <span className="text-violet-400 font-semibold">Click to upload</span> or drag & drop
-                </p>
-                <p className="text-[11px] text-zinc-700 mt-1">PDF · DOCX · TXT · CSV · MD · Max {MAX_MB} MB</p>
-              </div>
-            </>
-          )}
-        </div>
-        <input id="file-input" type="file" className="hidden"
-          accept={ALLOWED.join(",")}
-          onChange={(e) => { const f = e.target.files?.[0]; if (f) processFile(f); e.target.value = ""; }}
-          disabled={loading}
-        />
-      </label>
+      {/* ── Drop Zone ── */}
+      <div className="opacity-0 animate-fade-up delay-75 mb-4">
+        <label
+          htmlFor="file-input"
+          onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={(e) => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files[0]; if (f) processFile(f); }}
+          className={`flex flex-col items-center justify-center w-full h-40 sm:h-48 lg:h-52 rounded-2xl border-2 border-dashed cursor-pointer transition-all duration-300 select-none relative overflow-hidden ${
+            loading  ? "opacity-50 pointer-events-none border-white/[0.06]" :
+            dragOver ? "border-[#7C5CFC]/50" :
+                       "border-white/[0.07] hover:border-[#7C5CFC]/35"
+          }`}
+          style={dragOver
+            ? { background: "rgba(124,92,252,0.06)", backdropFilter: "blur(20px)" }
+            : { background: "rgba(255,255,255,0.02)", backdropFilter: "blur(16px)" }}
+        >
+          <div className="flex flex-col items-center gap-3 sm:gap-4 pointer-events-none px-4 text-center">
+            {loading ? (
+              <>
+                <Loader2 className="w-8 h-8 sm:w-10 sm:h-10 text-[#7C5CFC] animate-spin-smooth" strokeWidth={1.5} />
+                <p className="text-[12px] sm:text-[13px] text-[#7E8090]">{progress}</p>
+              </>
+            ) : (
+              <>
+                <div className="p-3 sm:p-4 rounded-xl sm:rounded-2xl transition-all duration-300"
+                  style={dragOver
+                    ? { background: "rgba(124,92,252,0.15)", border: "1px solid rgba(124,92,252,0.30)" }
+                    : { background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                  <UploadCloud size={20} strokeWidth={1.5} className={dragOver ? "text-[#9B7DFF]" : "text-[#5A5C6A]"} />
+                </div>
+                <div>
+                  <p className="text-[13px] sm:text-[14px] font-semibold text-[#7E8090]">
+                    <span className="text-[#9B7DFF]">Click to upload</span> or drag & drop
+                  </p>
+                  <p className="text-[11px] sm:text-[12px] text-[#5A5C6A] mt-1">
+                    PDF · DOCX · TXT · CSV · MD · Max {MAX_MB} MB
+                  </p>
+                </div>
+              </>
+            )}
+          </div>
+          <input id="file-input" type="file" className="hidden"
+            accept={ALLOWED.join(",")}
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) processFile(f); e.target.value = ""; }}
+            disabled={loading}
+          />
+        </label>
+      </div>
 
-      {/* Error */}
+      {/* ── Error ── */}
       {error && (
-        <div className="flex items-center gap-2 text-[12px] text-red-400 bg-red-500/[0.07] border border-red-500/[0.18] rounded-xl px-4 py-2.5 mb-5">
-          <AlertTriangle size={13} className="shrink-0" /> {error}
+        <div className="flex items-start sm:items-center gap-2.5 text-[12px] text-[#EF4444] rounded-xl px-4 py-3 mb-5 sm:mb-6 animate-fade-in"
+          style={{ background: "rgba(239,68,68,0.07)", border: "1px solid rgba(239,68,68,0.18)" }}>
+          <AlertTriangle size={14} strokeWidth={1.8} className="shrink-0 mt-0.5 sm:mt-0" /> {error}
         </div>
       )}
 
-      {/* List */}
-      <div className="mt-7">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-[11px] font-bold text-zinc-600 uppercase tracking-widest flex items-center gap-2">
-            Your Files
-            <span className="px-2 py-0.5 bg-white/[0.04] text-zinc-600 rounded-full border border-white/[0.06] font-semibold tabular-nums">
-              {documents.length}
-            </span>
-          </h2>
-          {documents.length > 0 && (
-            <p className="text-[11px] text-zinc-700">
-              {documents.reduce((s, d) => s + (d.wordCount || 0), 0).toLocaleString()} total words indexed
-            </p>
-          )}
+      {/* ── File List ── */}
+      <div className="mt-6 sm:mt-8 opacity-0 animate-fade-up delay-150">
+        <div className="flex items-center justify-between mb-4 sm:mb-5">
+          <div>
+            <h2 className="text-[16px] sm:text-[20px] font-bold text-white tracking-[-0.03em] flex items-center gap-2 sm:gap-3">
+              Your Files
+              <span className="text-[11px] sm:text-[12px] font-bold text-[#7E8090] px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-lg tabular-nums"
+                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}>
+                {documents.length}
+              </span>
+            </h2>
+            {documents.length > 0 && (
+              <p className="text-[11px] sm:text-[13px] text-[#5A5C6A] mt-1">
+                {documents.reduce((s, d) => s + (d.wordCount || 0), 0).toLocaleString()} total words indexed
+              </p>
+            )}
+          </div>
         </div>
 
         {documents.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-14 border border-dashed border-white/[0.06] rounded-2xl text-center">
-            <FileText size={28} className="text-zinc-800 mb-3" />
-            <p className="text-[13px] font-medium text-zinc-600">No documents yet</p>
-            <p className="text-[11px] text-zinc-700 mt-1">Upload your first file above to get started.</p>
+          <div className="card-premium flex flex-col items-center justify-center py-14 sm:py-20 text-center px-4">
+            <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl flex items-center justify-center mb-4 sm:mb-5"
+              style={{ background: "rgba(124,92,252,0.10)", border: "1px solid rgba(124,92,252,0.20)" }}>
+              <FileText size={22} strokeWidth={1.5} className="text-[#7C5CFC]/60" />
+            </div>
+            <p className="text-[14px] sm:text-[15px] font-bold text-[#C4C5D0] tracking-[-0.02em]">No documents yet</p>
+            <p className="text-[12px] sm:text-[13px] text-[#5A5C6A] mt-2">Upload your first file above to get started.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4">
             {documents.map((doc) => {
               const selected = selectedDoc?.id === doc.id;
-              const e = ext(doc.name);
+              const e = getExt(doc.name);
+              const c = EXT_INLINE[e] || EXT_INLINE[".txt"];
               return (
-                <div
-                  key={doc.id}
-                  className={`group p-4 rounded-2xl border transition-all duration-200 ${
-                    selected
-                      ? "bg-violet-500/[0.07] border-violet-500/[0.25] shadow-[0_0_24px_rgba(139,92,246,0.07)]"
-                      : "bg-white/[0.02] border-white/[0.07] hover:border-white/[0.12] hover:bg-white/[0.03]"
-                  }`}
-                >
+                <div key={doc.id} className="card-premium p-4 sm:p-5"
+                  style={selected ? { background: "rgba(124,92,252,0.10)", boxShadow: "0 0 30px rgba(124,92,252,0.12), 0 8px 32px rgba(0,0,0,0.4)" } : {}}>
+
                   {/* Top row */}
-                  <div className="flex items-start gap-3 mb-3.5">
-                    <div className={`p-2 rounded-xl border shrink-0 ${EXT_STYLE[e] || EXT_STYLE[".txt"]}`}>
-                      <FileText size={15} />
+                  <div className="flex items-start gap-3 mb-3 sm:mb-4">
+                    <div className="p-2 sm:p-2.5 rounded-xl shrink-0"
+                      style={{ background: c.bg, border: `1px solid ${c.border}`, color: c.text }}>
+                      <FileText size={14} strokeWidth={1.8} />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p
-                        className="text-[13px] font-semibold text-zinc-200 truncate leading-tight"
-                        title={doc.name}
-                      >
+                      <p className="text-[12px] sm:text-[13px] font-bold text-[#C4C5D0] truncate leading-tight" title={doc.name}>
                         {doc.name}
                       </p>
-                      <div className="flex items-center gap-3 mt-1 text-[10px] text-zinc-700">
-                        <span className="flex items-center gap-1"><Hash size={9} />{fmtWords(doc.wordCount)} words</span>
-                        <span className="flex items-center gap-1"><Clock size={9} />{fmtDate(doc.uploadedAt)}</span>
+                      <div className="flex flex-wrap items-center gap-2 sm:gap-3 mt-1 sm:mt-1.5 text-[10px] text-[#5A5C6A]">
+                        <span className="flex items-center gap-1"><Hash size={9} strokeWidth={1.8} />{fmtWords(doc.wordCount)} words</span>
+                        <span className="flex items-center gap-1 hidden sm:flex"><Clock size={9} strokeWidth={1.8} />{fmtDate(doc.uploadedAt)}</span>
                       </div>
                     </div>
-                    {selected && <CheckCircle2 size={15} className="text-violet-400 shrink-0 mt-0.5" />}
+                    {selected && <CheckCircle2 size={15} strokeWidth={1.8} className="text-[#7C5CFC] shrink-0 mt-0.5" />}
                   </div>
 
-                  {/* Action row */}
-                  <div className="flex items-center gap-2 pt-3 border-t border-white/[0.05]">
-                    <button
-                      onClick={() => selectDoc(doc)}
-                      className={`flex-1 py-1.5 rounded-xl text-[11px] font-semibold transition-all ${
+                  {/* Actions */}
+                  <div className="flex items-center gap-2 pt-3 sm:pt-4 border-t border-white/[0.05]">
+                    <button onClick={() => selectDoc(doc)}
+                      className={`flex-1 py-1.5 sm:py-2 rounded-xl text-[11px] sm:text-[12px] font-bold transition-all duration-200 ${
                         selected
-                          ? "bg-violet-600 text-white shadow-sm shadow-violet-900/30"
-                          : "bg-white/[0.04] text-zinc-500 hover:bg-white/[0.08] hover:text-zinc-200"
+                          ? "btn-primary text-white"
+                          : "text-[#7E8090] hover:text-[#C4C5D0] hover:bg-white/[0.08]"
                       }`}
-                    >
+                      style={!selected ? { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" } : {}}>
                       {selected ? "✓ Selected" : "Select"}
                     </button>
-                    <button
-                      onClick={() => { selectDoc(doc); router.push("/chat"); }}
-                      className="flex items-center gap-1 text-[11px] font-medium text-zinc-600 hover:text-violet-300 px-3 py-1.5 rounded-xl hover:bg-violet-500/8 transition-colors"
-                    >
-                      <MessageSquare size={12} /> Chat
+                    <button onClick={() => { selectDoc(doc); router.push("/chat"); }}
+                      className="flex items-center gap-1 sm:gap-1.5 text-[11px] sm:text-[12px] font-semibold text-[#7E8090] hover:text-[#9B7DFF] px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl transition-all border border-transparent hover:border-[#7C5CFC]/20 hover:bg-[#7C5CFC]/[0.08]">
+                      <MessageSquare size={12} strokeWidth={1.8} />
+                      <span className="hidden sm:inline">Chat</span>
                     </button>
-                    <button
-                      onClick={() => removeDocument(doc.id)}
-                      className="p-1.5 rounded-xl text-zinc-800 hover:text-red-400 hover:bg-red-500/[0.07] transition-all"
-                      title="Delete"
-                    >
-                      <Trash2 size={13} />
+                    <button onClick={() => removeDocument(doc.id)}
+                      className="p-1.5 sm:p-2 rounded-xl text-[#444654] hover:text-[#EF4444] transition-all border border-transparent hover:border-[#EF4444]/20 hover:bg-[#EF4444]/[0.07]"
+                      title="Delete">
+                      <Trash2 size={13} strokeWidth={1.8} />
                     </button>
                   </div>
                 </div>

@@ -3,93 +3,137 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useStore } from "@/store/useStore";
+import { useState } from "react";
 import {
   LayoutDashboard, FileText, MessageSquare,
-  Lightbulb, BrainCircuit, Trash2, ChevronRight, Settings,
+  Lightbulb, BrainCircuit, Trash2, Settings,
+  Search, BarChart3, Sparkles, ChevronRight,
+  Cpu, X, Menu,
 } from "lucide-react";
 
-const NAV = [
-  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { name: "Documents", href: "/documents", icon: FileText },
-  { name: "Chat",      href: "/chat",      icon: MessageSquare },
-  { name: "Insights",  href: "/insights",  icon: Lightbulb },
+const NAV_MAIN = [
+  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, desc: "Overview" },
+  { name: "Documents", href: "/documents", icon: FileText,        desc: "Knowledge base" },
+  { name: "AI Chat",   href: "/chat",       icon: MessageSquare,   desc: "Chat with docs" },
+  { name: "Insights",  href: "/insights",  icon: Lightbulb,       desc: "How it works" },
 ];
 
-export default function Sidebar() {
+const NAV_TOOLS = [
+  { name: "Search",    href: "/dashboard", icon: Search,    desc: "Find anything" },
+  { name: "Analytics", href: "/dashboard", icon: BarChart3, desc: "Usage stats" },
+];
+
+function SidebarContent({ onClose }: { onClose?: () => void }) {
   const pathname = usePathname();
   const { documents, selectedDoc, selectDoc, removeDocument, openSettings, activeProvider, providers } = useStore();
-
   const provider = providers[activeProvider];
 
   return (
-    <aside className="w-60 shrink-0 flex flex-col border-r border-white/[0.06] bg-[#0a0a0f]">
+    <div className="flex flex-col h-full">
+      {/* Decorative orbs */}
+      <div className="sidebar-orb-top" />
+      <div className="sidebar-orb-bottom" />
 
-      {/* Logo */}
-      <div className="px-5 py-5 flex items-center gap-3 border-b border-white/[0.06]">
-        <div className="relative">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-violet-500/25">
-            <BrainCircuit size={17} className="text-white" />
+      {/* ── Logo ── */}
+      <div className="relative px-5 py-5 border-b border-white/[0.05] flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="relative shrink-0">
+            <div className="absolute inset-0 rounded-2xl blur-md opacity-60"
+              style={{ background: "linear-gradient(135deg, #7C5CFC, #4F46E5)" }} />
+            <div className="relative w-10 h-10 rounded-2xl flex items-center justify-center"
+              style={{ background: "linear-gradient(135deg, #7C5CFC 0%, #4F46E5 100%)", boxShadow: "0 4px 20px rgba(124,92,252,0.4), 0 1px 0 rgba(255,255,255,0.2) inset" }}>
+              <BrainCircuit size={18} className="text-white" strokeWidth={1.8} />
+            </div>
+            <span className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-[#22C55E] rounded-full border-2 border-[#0A0A12]"
+              style={{ boxShadow: "0 0 8px rgba(34,197,94,0.6)" }} />
           </div>
-          <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-400 rounded-full border-2 border-[#0a0a0f]" />
+          <div>
+            <p className="text-[15px] font-bold text-white tracking-[-0.03em] leading-none">SecondBrain</p>
+            <p className="text-[10px] text-[#5A5C6A] tracking-[0.14em] uppercase mt-1 font-medium">AI Workspace</p>
+          </div>
         </div>
-        <div>
-          <p className="text-[14px] font-semibold text-white tracking-tight leading-none">SecondBrain</p>
-          <p className="text-[10px] text-zinc-600 tracking-widest uppercase mt-0.5">AI Knowledge</p>
-        </div>
+        {/* Close button — mobile only */}
+        {onClose && (
+          <button onClick={onClose}
+            className="lg:hidden w-8 h-8 rounded-xl btn-glass flex items-center justify-center text-[#5A5C6A] hover:text-white transition-all">
+            <X size={15} strokeWidth={1.8} />
+          </button>
+        )}
       </div>
 
-      {/* Nav */}
-      <nav className="px-3 pt-5 space-y-0.5">
-        <p className="text-[9px] font-bold text-zinc-700 uppercase tracking-widest px-2 mb-2">Menu</p>
-        {NAV.map(({ name, href, icon: Icon }) => {
-          const active = pathname === href;
+      {/* ── Main Nav ── */}
+      <nav className="relative px-3 pt-5 space-y-0.5">
+        <p className="text-[9px] font-bold text-[#3A3C4A] uppercase tracking-[0.16em] px-3 mb-3">Navigation</p>
+        {NAV_MAIN.map(({ name, href, icon: Icon, desc }) => {
+          const active = pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
           return (
-            <Link
-              key={name}
-              href={href}
-              className={`relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all group ${
+            <Link key={name} href={href} onClick={onClose}
+              className={`relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-200 group ${
                 active
-                  ? "bg-violet-500/[0.12] text-violet-300 border border-violet-500/[0.18]"
-                  : "text-zinc-500 hover:text-zinc-200 hover:bg-white/[0.04]"
+                  ? "glass-accent text-white"
+                  : "text-[#7E8090] hover:text-[#C4C5D0] border border-transparent hover:border-white/[0.05] hover:bg-white/[0.03]"
               }`}
             >
-              {active && (
-                <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-violet-400 rounded-r-full" />
-              )}
-              <Icon size={15} className={active ? "text-violet-400" : "text-zinc-600 group-hover:text-zinc-400 transition-colors"} />
-              {name}
-              {active && <ChevronRight size={11} className="ml-auto text-violet-600" />}
+              {active && <span className="nav-active-bar" />}
+              <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-all duration-200 ${
+                active
+                  ? "bg-[#7C5CFC]/25 text-[#9B7DFF]"
+                  : "bg-white/[0.04] text-[#5A5C6A] group-hover:bg-white/[0.07] group-hover:text-[#9B9CAA]"
+              }`}>
+                <Icon size={14} strokeWidth={1.8} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <span className="block leading-none">{name}</span>
+                <span className={`text-[10px] font-normal mt-0.5 block ${
+                  active ? "text-[#7C5CFC]/60" : "text-[#3A3C4A] group-hover:text-[#5A5C6A]"
+                }`}>{desc}</span>
+              </div>
+              {active && <ChevronRight size={12} className="text-[#7C5CFC]/40 shrink-0" />}
             </Link>
           );
         })}
       </nav>
 
-      {/* Recent docs */}
+      {/* ── Tools ── */}
+      <nav className="relative px-3 pt-5 space-y-0.5">
+        <p className="text-[9px] font-bold text-[#3A3C4A] uppercase tracking-[0.16em] px-3 mb-3">Tools</p>
+        {NAV_TOOLS.map(({ name, href, icon: Icon, desc }) => (
+          <Link key={name} href={href} onClick={onClose}
+            className="relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium text-[#7E8090] hover:text-[#C4C5D0] border border-transparent hover:border-white/[0.05] hover:bg-white/[0.03] transition-all duration-200 group"
+          >
+            <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 bg-white/[0.04] text-[#5A5C6A] group-hover:bg-white/[0.07] group-hover:text-[#9B9CAA] transition-all">
+              <Icon size={14} strokeWidth={1.8} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <span className="block leading-none">{name}</span>
+              <span className="text-[10px] font-normal mt-0.5 block text-[#3A3C4A] group-hover:text-[#5A5C6A]">{desc}</span>
+            </div>
+            <span className="text-[9px] font-bold text-[#3A3C4A] bg-white/[0.04] px-1.5 py-0.5 rounded-md border border-white/[0.04]">Soon</span>
+          </Link>
+        ))}
+      </nav>
+
+      {/* ── Recent Files ── */}
       {documents.length > 0 && (
-        <div className="px-3 pt-5 flex-1 min-h-0 flex flex-col overflow-hidden">
-          <p className="text-[9px] font-bold text-zinc-700 uppercase tracking-widest px-2 mb-2">Recent</p>
+        <div className="relative px-3 pt-5 flex-1 min-h-0 flex flex-col overflow-hidden">
+          <p className="text-[9px] font-bold text-[#3A3C4A] uppercase tracking-[0.16em] px-3 mb-3">Recent Files</p>
           <div className="flex-1 overflow-y-auto space-y-0.5 pr-1">
-            {documents.slice(0, 10).map((doc) => {
+            {documents.slice(0, 8).map((doc) => {
               const sel = selectedDoc?.id === doc.id;
               return (
-                <div
-                  key={doc.id}
-                  onClick={() => selectDoc(doc)}
-                  className={`group flex items-center gap-2 px-3 py-2 rounded-xl cursor-pointer transition-all ${
-                    sel
-                      ? "bg-indigo-500/[0.1] border border-indigo-500/[0.18]"
-                      : "hover:bg-white/[0.04] border border-transparent"
+                <div key={doc.id} onClick={() => { selectDoc(doc); onClose?.(); }}
+                  className={`group flex items-center gap-2.5 px-3 py-2 rounded-xl cursor-pointer transition-all duration-200 ${
+                    sel ? "glass-accent" : "hover:bg-white/[0.04] border border-transparent hover:border-white/[0.05]"
                   }`}
                 >
-                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${sel ? "bg-indigo-400" : "bg-zinc-700"}`} />
-                  <span className={`text-[11px] truncate flex-1 leading-none ${sel ? "text-indigo-300" : "text-zinc-600 group-hover:text-zinc-300"}`}>
+                  <div className={`w-1.5 h-1.5 rounded-full shrink-0 transition-colors ${sel ? "bg-[#7C5CFC]" : "bg-[#3A3C4A] group-hover:bg-[#7E8090]"}`}
+                    style={sel ? { boxShadow: "0 0 6px rgba(124,92,252,0.8)" } : {}} />
+                  <span className={`text-[11px] truncate flex-1 leading-none font-medium transition-colors ${sel ? "text-[#C4C5D0]" : "text-[#5A5C6A] group-hover:text-[#9B9CAA]"}`}>
                     {doc.name.replace(/\.[^/.]+$/, "")}
                   </span>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); removeDocument(doc.id); }}
-                    className="opacity-0 group-hover:opacity-100 text-zinc-700 hover:text-red-400 transition-all"
-                  >
-                    <Trash2 size={11} />
+                  <button onClick={(e) => { e.stopPropagation(); removeDocument(doc.id); }}
+                    className="opacity-0 group-hover:opacity-100 text-[#3A3C4A] hover:text-[#EF4444] transition-all p-0.5 rounded">
+                    <Trash2 size={10} strokeWidth={1.8} />
                   </button>
                 </div>
               );
@@ -98,40 +142,91 @@ export default function Sidebar() {
         </div>
       )}
 
-      {/* Active provider pill */}
-      <div className="px-3 pt-3">
-        <button
-          onClick={openSettings}
-          className="w-full flex items-center gap-2 px-3 py-2 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/[0.05] hover:border-white/[0.10] transition-all group"
-          title="API Settings"
+      <div className="flex-1" />
+
+      {/* ── Model Selector ── */}
+      <div className="relative px-3 pb-3">
+        <button onClick={openSettings}
+          className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl glass btn-glass group transition-all duration-200 hover:border-[#7C5CFC]/20"
         >
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-          <span className="text-[11px] text-zinc-500 group-hover:text-zinc-300 truncate flex-1 text-left transition-colors">
-            {provider?.label ?? "Groq"} · {provider?.model?.split("/").pop() ?? ""}
-          </span>
-          <Settings size={11} className="text-zinc-700 group-hover:text-zinc-400 shrink-0 transition-colors" />
+          <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+            style={{ background: "rgba(124,92,252,0.12)", border: "1px solid rgba(124,92,252,0.2)" }}>
+            <Cpu size={13} strokeWidth={1.8} className="text-[#7C5CFC]" />
+          </div>
+          <div className="flex-1 min-w-0 text-left">
+            <p className="text-[11px] font-semibold text-[#7E8090] group-hover:text-[#C4C5D0] transition-colors leading-none">
+              {provider?.label ?? "Groq"}
+            </p>
+            <p className="text-[10px] text-[#3A3C4A] group-hover:text-[#5A5C6A] transition-colors mt-0.5 truncate">
+              {provider?.model?.split("/").pop() ?? "llama-3.3-70b"}
+            </p>
+          </div>
+          <span className="w-1.5 h-1.5 rounded-full bg-[#22C55E] shrink-0 animate-pulse"
+            style={{ boxShadow: "0 0 6px rgba(34,197,94,0.7)" }} />
         </button>
       </div>
 
-      {/* Footer */}
-      <div className="px-4 py-4 border-t border-white/[0.06] mt-3">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-600 to-indigo-700 flex items-center justify-center text-[11px] font-bold text-white shrink-0">
-            R
+      {/* ── User Profile ── */}
+      <div className="relative px-4 py-4 border-t border-white/[0.05]">
+        <div className="absolute top-0 left-4 right-4 h-px"
+          style={{ background: "linear-gradient(90deg, transparent, rgba(124,92,252,0.15), transparent)" }} />
+        <div className="flex items-center gap-3">
+          <div className="relative shrink-0">
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center text-[13px] font-bold text-white"
+              style={{ background: "linear-gradient(135deg, #7C5CFC 0%, #4F46E5 100%)", boxShadow: "0 4px 14px rgba(124,92,252,0.35), 0 1px 0 rgba(255,255,255,0.15) inset" }}>
+              R
+            </div>
+            <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-[#22C55E] rounded-full border-2 border-[#0A0A12]"
+              style={{ boxShadow: "0 0 6px rgba(34,197,94,0.6)" }} />
           </div>
-          <div className="min-w-0">
-            <p className="text-[12px] font-medium text-zinc-300 leading-none">Rayan</p>
-            <p className="text-[10px] text-zinc-600 mt-0.5">Free plan</p>
+          <div className="flex-1 min-w-0">
+            <p className="text-[13px] font-semibold text-[#C4C5D0] leading-none">Rayan</p>
+            <p className="text-[10px] text-[#5A5C6A] mt-0.5 flex items-center gap-1">
+              <Sparkles size={9} strokeWidth={1.8} className="text-[#7C5CFC]" />
+              Pro Plan
+            </p>
           </div>
-          <button
-            onClick={openSettings}
-            className="ml-auto w-7 h-7 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] flex items-center justify-center text-zinc-600 hover:text-zinc-300 transition-all"
-            title="Settings"
-          >
-            <Settings size={13} />
+          <button onClick={openSettings}
+            className="w-8 h-8 rounded-xl flex items-center justify-center text-[#5A5C6A] hover:text-[#C4C5D0] transition-all btn-glass">
+            <Settings size={13} strokeWidth={1.8} />
           </button>
         </div>
       </div>
-    </aside>
+    </div>
+  );
+}
+
+export default function Sidebar() {
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  return (
+    <>
+      {/* ── Desktop sidebar ── */}
+      <aside className="hidden lg:flex w-[280px] shrink-0 flex-col h-screen sticky top-0 z-20 glass-deep relative overflow-hidden">
+        <SidebarContent />
+      </aside>
+
+      {/* ── Mobile hamburger trigger (rendered in Topbar via context, but we expose a button here too) ── */}
+      {/* Mobile drawer overlay */}
+      {mobileOpen && (
+        <div className="fixed inset-0 z-50 lg:hidden">
+          {/* Backdrop */}
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setMobileOpen(false)} />
+          {/* Drawer */}
+          <aside className="absolute left-0 top-0 bottom-0 w-[280px] glass-deep overflow-hidden animate-slide-left">
+            <SidebarContent onClose={() => setMobileOpen(false)} />
+          </aside>
+        </div>
+      )}
+
+      {/* Mobile menu button — floats bottom-left, only on mobile */}
+      <button
+        onClick={() => setMobileOpen(true)}
+        className="lg:hidden fixed bottom-20 left-4 z-40 w-11 h-11 rounded-2xl btn-primary flex items-center justify-center text-white shadow-lg"
+        style={{ boxShadow: "0 8px 24px rgba(124,92,252,0.4)" }}
+      >
+        <Menu size={18} strokeWidth={2} />
+      </button>
+    </>
   );
 }
