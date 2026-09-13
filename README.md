@@ -1,6 +1,7 @@
 <div align="center">
 
-<img src="assets/img5.png" alt="SecondBrain Banner" width="100%" style="border-radius: 12px;" />
+<img src="frontend
+/second-brain/assets/img5.png" alt="SecondBrain Banner" width="100%" style="border-radius: 12px;" />
 
 <br />
 <br />
