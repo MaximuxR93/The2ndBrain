@@ -3,6 +3,7 @@
 import { useState, useCallback } from "react";
 import { useStore } from "@/store/useStore";
 import { useRouter } from "next/navigation";
+import { toast } from "@/components/Toast";
 import {
   UploadCloud, FileText, CheckCircle2,
   Loader2, Trash2, MessageSquare, Clock, Hash, AlertTriangle,
@@ -29,6 +30,13 @@ function fmtWords(n?: number) {
 }
 
 export default function DocumentsPage() {
+  // NOTE: `content` is no longer part of the Document shape anywhere in the
+  // frontend — the server holds document text + chunks + embeddings.
+  //
+  // Document hydration also no longer happens here — <DocumentsHydrator />
+  // in the root layout fetches GET /documents once, globally, on app load,
+  // so every page (including Dashboard) sees populated documents without
+  // each page re-fetching independently.
   const { documents, addDocument, selectDoc, selectedDoc, removeDocument } = useStore();
   const router = useRouter();
   const [loading,  setLoading]  = useState(false);
@@ -53,21 +61,38 @@ export default function DocumentsPage() {
       const res  = await fetch(`${API}/upload`, { method: "POST", body: form });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Upload failed");
-      const content = (data.text || "").trim();
-      if (!content) { setError("No readable text found in this file."); setLoading(false); setProgress(""); return; }
-      setProgress("Indexing…");
-      const wordCount = content.split(/\s+/).filter(Boolean).length;
+
+      // Backend now does chunking + embedding server-side and returns metadata
+      // only — no raw `text` field anymore, and nothing left for the client to index.
+      setProgress("Indexed");
       addDocument({
-        id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        name: file.name, content, wordCount,
-        charCount: content.length, fileType: e,
+        id: data.id,
+        name: data.name,
+        wordCount: data.wordCount,
+        charCount: data.charCount,
+        fileType: data.fileType,
+        uploadedAt: data.uploadedAt,
       });
+      toast.success(`"${file.name}" uploaded — ${data.wordCount.toLocaleString()} words, ${data.chunkCount} chunks embedded`);
       setProgress("");
     } catch (err: any) {
-      setError(err.message || "Upload failed. Is the backend running?");
+      const msg = err.message || "Upload failed. Is the backend running?";
+      setError(msg);
+      toast.error(msg);
     }
     setLoading(false);
   }, [documents, addDocument, API]);
+
+  const handleDelete = useCallback(async (doc: { id: string; name: string }) => {
+    try {
+      const res = await fetch(`${API}/documents/${doc.id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed to delete on server");
+      removeDocument(doc.id);
+      toast.info(`"${doc.name}" removed`);
+    } catch (err: any) {
+      toast.error(err.message || "Could not delete document");
+    }
+  }, [API, removeDocument]);
 
   return (
     <div className="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-10">
@@ -78,7 +103,7 @@ export default function DocumentsPage() {
           Documents
         </h1>
         <p className="text-[13px] sm:text-[15px] lg:text-[16px] text-[#7E8090] mt-2 sm:mt-3 leading-[1.6]">
-          Full document content is stored and used for RAG retrieval — no truncation.
+          Documents are parsed, chunked, and embedded server-side — this device is just a view into it.
         </p>
       </header>
 
@@ -211,7 +236,7 @@ export default function DocumentsPage() {
                       <MessageSquare size={12} strokeWidth={1.8} />
                       <span className="hidden sm:inline">Chat</span>
                     </button>
-                    <button onClick={() => removeDocument(doc.id)}
+                    <button onClick={() => handleDelete(doc)}
                       className="p-1.5 sm:p-2 rounded-xl text-[#444654] hover:text-[#EF4444] transition-all border border-transparent hover:border-[#EF4444]/20 hover:bg-[#EF4444]/[0.07]"
                       title="Delete">
                       <Trash2 size={13} strokeWidth={1.8} />

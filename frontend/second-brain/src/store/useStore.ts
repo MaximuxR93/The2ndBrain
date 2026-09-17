@@ -4,7 +4,7 @@ import { persist } from "zustand/middleware";
 export interface Document {
   id: string;
   name: string;
-  content: string;
+  content?: string;          // optional — server-side RAG doesn't ship raw text to client
   wordCount: number;
   charCount: number;
   fileType: string;
@@ -85,7 +85,10 @@ interface Store {
   providers: Record<ProviderId, ProviderConfig>;
   settingsOpen: boolean;
 
-  addDocument:        (doc: Omit<Document, "uploadedAt">) => void;
+  /** Add or replace a single document. `uploadedAt` falls back to Date.now(). */
+  addDocument:        (doc: Omit<Document, "uploadedAt"> & { uploadedAt?: number }) => void;
+  /** Bulk-replace the document list (used when hydrating from server). */
+  setDocuments:       (docs: Document[]) => void;
   removeDocument:     (id: string) => void;
   selectDoc:          (doc: Document | null) => void;
   getMessages:        (docId: string) => Message[];
@@ -116,10 +119,19 @@ export const useStore = create<Store>()(
       addDocument: (doc) =>
         set((s) => ({
           documents: [
-            { ...doc, uploadedAt: Date.now() },
+            { ...doc, uploadedAt: doc.uploadedAt ?? Date.now() },
             ...s.documents.filter((d) => d.id !== doc.id),
           ],
         })),
+
+      setDocuments: (docs) =>
+        set((s) => {
+          const selected =
+            s.selectedDoc && docs.some((d) => d.id === s.selectedDoc!.id)
+              ? docs.find((d) => d.id === s.selectedDoc!.id) ?? null
+              : null;
+          return { documents: docs, selectedDoc: selected };
+        }),
 
       removeDocument: (id) =>
         set((s) => {

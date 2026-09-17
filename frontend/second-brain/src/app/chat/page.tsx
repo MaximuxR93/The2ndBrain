@@ -7,44 +7,17 @@ import remarkGfm from "remark-gfm";
 import {
   Bot, User, Sparkles, Send, BrainCircuit,
   FileText, Trash2, Copy, Check, ChevronDown,
-  Zap, BookOpen, BarChart3, RefreshCw, Hash, Settings,
+  Zap, BookOpen, BarChart3, RefreshCw, Hash, Settings, Layers,
 } from "lucide-react";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
 
-/* ── RAG helpers ── */
-function chunkDoc(text: string, size = 600, overlap = 120): string[] {
-  const chunks: string[] = [];
-  for (let i = 0; i < text.length; i += size - overlap) {
-    chunks.push(text.slice(i, i + size));
-    if (i + size >= text.length) break;
-  }
-  return chunks;
-}
-
-function scoreChunk(chunk: string, query: string): number {
-  const keywords = query.toLowerCase().split(/\s+/).filter((w) => w.length > 3);
-  const lower = chunk.toLowerCase();
-  return keywords.reduce((score, kw) => {
-    const hits = (lower.match(new RegExp(kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g")) || []).length;
-    return score + hits;
-  }, 0);
-}
-
-function buildContext(content: string, query: string): string {
-  if (!content?.trim()) return "";
-  const chunks = chunkDoc(content);
-  if (!chunks.length) return "";
-  const ranked = chunks
-    .map((c, i) => ({ c, score: scoreChunk(c, query) + (i === 0 ? 0.5 : 0) }))
-    .sort((a, b) => b.score - a.score);
-  const topSet = new Set<string>();
-  const top: string[] = [];
-  [ranked[0].c, ...ranked.slice(0, 3).map((r) => r.c)].forEach((c) => {
-    if (!topSet.has(c)) { topSet.add(c); top.push(c); }
-  });
-  return top.join("\n\n---\n\n");
-}
+/* ── NOTE ──────────────────────────────────────────────────────────────────
+ * chunkDoc / scoreChunk / buildContext are gone. Retrieval now happens
+ * server-side against real embeddings — the frontend just sends the raw
+ * question + docId and streams the answer back. This is strictly less code
+ * than before, not more.
+ * ────────────────────────────────────────────────────────────────────── */
 
 /* ── Quick actions ── */
 const ACTIONS = [
@@ -72,6 +45,8 @@ const iconColor: Record<Color, string> = {
   blue: "text-[#3B82F6]", pink: "text-[#EC4899]", teal: "text-[#14B8A6]",
 };
 
+type ChatSource = { chunkIndex: number; score: number; preview: string };
+
 /* ── Copy button ── */
 function CopyBtn({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -86,6 +61,35 @@ function CopyBtn({ text }: { text: string }) {
   );
 }
 
+/* ── Sources chip (transparency — shows what the answer was actually grounded in) ── */
+function SourcesChip({ sources }: { sources: ChatSource[] }) {
+  const [open, setOpen] = useState(false);
+  if (!sources?.length) return null;
+  const topScore = Math.round(sources[0].score * 100);
+  return (
+    <div className="mt-1">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex items-center gap-1.5 text-[10px] text-[#5A5C6A] hover:text-[#9B7DFF] transition-colors"
+      >
+        <Layers size={10} strokeWidth={1.8} />
+        {sources.length} source{sources.length !== 1 ? "s" : ""} · top match {topScore}%
+      </button>
+      {open && (
+        <div className="mt-1.5 space-y-1.5">
+          {sources.map((s) => (
+            <div key={s.chunkIndex} className="text-[10.5px] text-[#5A5C6A] bg-white/[0.02] border border-white/[0.05] rounded-lg px-2.5 py-1.5 leading-snug">
+              <span className="text-[#7C5CFC] font-semibold">§{s.chunkIndex}</span>{" "}
+              <span className="text-[#3A3C4A]">({Math.round(s.score * 100)}%)</span>{" "}
+              {s.preview}…
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ── Main ── */
 export default function ChatPage() {
   const { selectedDoc, getMessages, addMessage, clearMessages, activeProvider, providers, openSettings } = useStore();
@@ -93,16 +97,18 @@ export default function ChatPage() {
   const [input, setInput]     = useState("");
   const [loading, setLoading] = useState(false);
   const [showDown, setShowDown] = useState(false);
+  const [sourcesByIndex, setSourcesByIndex] = useState<Record<number, ChatSource[]>>({});
 
   const scrollRef   = useRef<HTMLDivElement>(null);
   const bottomRef   = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const API           = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:5000";
+  const API = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:5000";
   const messages      = selectedDoc ? getMessages(selectedDoc.id) : [];
   const providerCfg   = providers[activeProvider];
   const providerLabel = providerCfg?.label ?? "Groq";
-  const modelLabel    = providerCfg?.model?.split("/").pop() ?? "llama-3.3-70b-versatile";
+  // was: ?? "llama-3.3-70b-versatile" (Groq decommissioned this model)
+  const modelLabel    = providerCfg?.model?.split("/").pop() ?? "gpt-oss-120b";
 
   const scrollBottom = useCallback(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -125,46 +131,88 @@ export default function ChatPage() {
     el.style.height = `${Math.min(el.scrollHeight, 180)}px`;
   }, [input]);
 
+  // Reset sources map when switching documents so indices don't bleed across chats
+  useEffect(() => { setSourcesByIndex({}); }, [selectedDoc?.id]);
+
   const send = async (override?: string) => {
     if (!selectedDoc) return;
     const text = (override ?? input).trim();
     if (!text) return;
 
-    const context = buildContext(selectedDoc.content, text);
     const history = messages.slice(-6).map((m) => ({ role: m.role, content: m.content }));
 
     addMessage(selectedDoc.id, { role: "user", content: text });
     setInput("");
     setLoading(true);
+    let assistantStarted = false;
+    const errorText = (msg: string) =>
+      `**⚠ Error:** ${msg}\n\nMake sure the backend is running and reachable at:\n\`\`\`\n${API}\n\`\`\``;
 
     try {
       const res = await fetch(`${API}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          message: text, context, docName: selectedDoc.name,
+          message: text,
+          docId: selectedDoc.id,
           conversationHistory: history,
           provider: activeProvider,
-          apiKey: providerCfg?.apiKey ?? "",
-          model: providerCfg?.model ?? "llama-3.3-70b-versatile",
+          // was: providerCfg?.model ?? "llama-3.3-70b-versatile" (deprecated)
+          model: providerCfg?.model ?? "openai/gpt-oss-120b",
         }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Request failed");
+
+      const contentType = res.headers.get("content-type") || "";
+      if (!res.ok) {
+        const data = contentType.includes("application/json")
+          ? await res.json().catch(() => ({}))
+          : {};
+        throw new Error(data.error || `Request failed (${res.status})`);
+      }
 
       addMessage(selectedDoc.id, { role: "assistant", content: "" });
-      const words = data.reply.split(" ");
+      assistantStarted = true;
+      const assistantIndex = messages.length + 1;
+
+      const reader = res.body!.getReader();
+      const decoder = new TextDecoder();
       let built = "";
-      for (let i = 0; i < words.length; i++) {
-        built += (i === 0 ? "" : " ") + words[i];
-        useStore.getState().updateLastMessage(selectedDoc.id, built);
-        await new Promise((r) => setTimeout(r, words.length > 300 ? 6 : 15));
+      let buf = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+
+        const frames = buf.split("\n\n");
+        buf = frames.pop() ?? "";
+
+        for (const frame of frames) {
+          const lines = frame.split("\n");
+          const eventLine = lines.find((l) => l.startsWith("event:"));
+          const dataLine  = lines.find((l) => l.startsWith("data:"));
+          if (!dataLine) continue;
+
+          const event = eventLine?.replace("event:", "").trim() ?? "message";
+          const data  = JSON.parse(dataLine.replace("data:", "").trim() || "{}");
+
+          if (event === "token") {
+            built += data.token;
+            useStore.getState().updateLastMessage(selectedDoc.id, built);
+          } else if (event === "sources") {
+            setSourcesByIndex((prev) => ({ ...prev, [assistantIndex]: data }));
+          } else if (event === "error") {
+            throw new Error(data.error || "Stream error");
+          }
+        }
       }
-    } catch (err: any) {
-      addMessage(selectedDoc.id, {
-        role: "assistant",
-        content: `**⚠ Error:** ${err.message || "Could not reach the backend."}\n\nMake sure the server is running:\n\`\`\`\ncd backend && node server.js\n\`\`\``,
-      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Could not reach the backend.";
+      if (assistantStarted) {
+        useStore.getState().updateLastMessage(selectedDoc.id, errorText(msg));
+      } else {
+        addMessage(selectedDoc.id, { role: "assistant", content: errorText(msg) });
+      }
     }
     setLoading(false);
   };
@@ -174,7 +222,7 @@ export default function ChatPage() {
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-3.5rem)] lg:h-[calc(100vh-3.5rem)] relative overflow-hidden" style={{ background: "#07070C" }}>
+    <div className="flex flex-col h-[calc(100vh-3.5rem-4rem)] lg:h-[calc(100vh-3.5rem)] relative overflow-hidden">
 
       {/* ── Chat Header ── */}
       <div className="shrink-0 flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4" style={{ background: "rgba(7,7,12,0.85)", backdropFilter: "blur(28px) saturate(180%)", WebkitBackdropFilter: "blur(28px) saturate(180%)", borderBottom: "1px solid rgba(255,255,255,0.055)", boxShadow: "0 1px 0 rgba(255,255,255,0.03) inset" }}>
@@ -365,29 +413,37 @@ export default function ChatPage() {
                     >
                       {msg.content}
                     </ReactMarkdown>
+                    {msg.role === "assistant" && sourcesByIndex[i] && (
+                      <SourcesChip sources={sourcesByIndex[i]} />
+                    )}
                   </div>
                 )}
               </div>
 
-              {/* Message actions */}
-              {msg.role === "assistant" && msg.content && (
-                <div className="flex items-center gap-0.5 pl-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                  <CopyBtn text={msg.content} />
-                  <button
-                    onClick={() => send("Please expand on your last answer with more detail and examples.")}
-                    className="p-1.5 rounded-lg text-[#5A5C6A] hover:text-[#B6B7C2] hover:bg-white/[0.06] transition-all"
-                    title="Expand"
-                  >
-                    <RefreshCw size={12} strokeWidth={1.8} />
-                  </button>
-                </div>
-              )}
+              {/* Timestamp + actions */}
+              <div className={`flex items-center gap-2 pl-1 ${msg.role === "user" ? "flex-row-reverse" : ""}`}>
+                <span className="text-[10px] text-[#3A3C4A] tabular-nums">
+                  {new Date(msg.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                </span>
+                {msg.role === "assistant" && msg.content && (
+                  <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                    <CopyBtn text={msg.content} />
+                    <button
+                      onClick={() => send("Please expand on your last answer with more detail and examples.")}
+                      className="p-1.5 rounded-lg text-[#5A5C6A] hover:text-[#B6B7C2] hover:bg-white/[0.06] transition-all"
+                      title="Expand"
+                    >
+                      <RefreshCw size={12} strokeWidth={1.8} />
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         ))}
 
         {/* Typing indicator */}
-        {loading && (
+        {loading && messages[messages.length - 1]?.role !== "assistant" && (
           <div className="flex gap-3 animate-fade-in">
             <div className="shrink-0 w-8 h-8 rounded-xl flex items-center justify-center mt-0.5" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", backdropFilter: "blur(12px)" }}>
               <Bot size={14} strokeWidth={1.8} className="text-[#7C5CFC]" />
