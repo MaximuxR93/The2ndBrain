@@ -37,6 +37,11 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
   const { documents, selectedDoc, selectDoc, removeDocument, openSettings, activeProvider, providers } = useStore();
   const provider = providers[activeProvider];
 
+  // Guard against malformed entries (stale localStorage from before a schema
+  // change, a failed/partial server hydration, etc.) — one bad document
+  // should never be able to crash the whole sidebar.
+  const validDocuments = documents.filter((d) => !!d?.id && !!d?.name);
+
   return (
     <div className="flex flex-col h-full">
       <div className="sidebar-orb-top" />
@@ -127,11 +132,11 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
       </nav>
 
       {/* ── Recent Files ── */}
-      {documents.length > 0 && (
+      {validDocuments.length > 0 && (
         <div className="relative px-3 pt-5 flex-1 min-h-0 flex flex-col overflow-hidden">
           <SectionLabel>Recent files</SectionLabel>
           <div className="flex-1 overflow-y-auto space-y-0.5 pr-1">
-            {documents.slice(0, 8).map((doc) => {
+            {validDocuments.slice(0, 8).map((doc) => {
               const sel = selectedDoc?.id === doc.id;
               return (
                 <div key={doc.id} onClick={() => { selectDoc(doc); onClose?.(); }}
