@@ -1,7 +1,7 @@
 <div align="center">
 
 <img src="frontend
-/second-brain/assets/img5.png" alt="SecondBrain Banner" width="100%" style="border-radius: 12px;" />
+/second-brain/assets/img1.png" alt="SecondBrain Banner" width="100%" style="border-radius: 12px;" />
 
 <br />
 <br />
@@ -46,16 +46,16 @@
 <div align="center">
 <table>
   <tr>
-    <td><img src="assets/screen1.png" width="400" alt="Dashboard" /></td>
-    <td><img src="assets/screen2.png" width="400" alt="Chat" /></td>
+    <td><img src="assets/img2.png" width="400" alt="Dashboard" /></td>
+    <td><img src="assets/img3.png" width="400" alt="Chat" /></td>
   </tr>
   <tr>
     <td align="center"><em>Dashboard</em></td>
     <td align="center"><em>Document Chat</em></td>
   </tr>
   <tr>
-    <td><img src="assets/screen3.png" width="400" alt="Upload" /></td>
-    <td><img src="assets/screen4.png" width="400" alt="Settings" /></td>
+    <td><img src="assets/img4.png" width="400" alt="Upload" /></td>
+    <td><img src="assets/img5.png" width="400" alt="Settings" /></td>
   </tr>
   <tr>
     <td align="center"><em>Document Upload</em></td>
