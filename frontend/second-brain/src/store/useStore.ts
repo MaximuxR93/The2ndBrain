@@ -75,6 +75,14 @@ const buildDefaultProviders = (): Record<ProviderId, ProviderConfig> =>
     ])
   ) as Record<ProviderId, ProviderConfig>;
 
+/** A document is only usable once it has the two fields every consumer
+ * assumes exist without checking — `id` and `name`. Anything missing either
+ * is treated as corrupt and dropped, rather than letting it reach a
+ * component that will call `.name.replace(...)` or similar and crash. */
+function isValidDocument(d: unknown): d is Document {
+  return !!d && typeof d === "object" && !!(d as Document).id && !!(d as Document).name;
+}
+
 interface Store {
   documents: Document[];
   selectedDoc: Document | null;
@@ -117,20 +125,32 @@ export const useStore = create<Store>()(
       settingsOpen: false,
 
       addDocument: (doc) =>
-        set((s) => ({
-          documents: [
-            { ...doc, uploadedAt: doc.uploadedAt ?? Date.now() },
-            ...s.documents.filter((d) => d.id !== doc.id),
-          ],
-        })),
+        set((s) => {
+          // Refuse to write a malformed document — this is the write-time
+          // half of the guard; onRehydrateStorage below is the read-time half.
+          if (!doc?.id || !doc?.name) {
+            console.warn("[store] addDocument: dropped malformed document", doc);
+            return s;
+          }
+          return {
+            documents: [
+              { ...doc, uploadedAt: doc.uploadedAt ?? Date.now() },
+              ...s.documents.filter((d) => d.id !== doc.id),
+            ],
+          };
+        }),
 
       setDocuments: (docs) =>
         set((s) => {
+          const clean = (docs ?? []).filter(isValidDocument);
+          if (clean.length !== (docs ?? []).length) {
+            console.warn(`[store] setDocuments: dropped ${(docs ?? []).length - clean.length} malformed document(s)`);
+          }
           const selected =
-            s.selectedDoc && docs.some((d) => d.id === s.selectedDoc!.id)
-              ? docs.find((d) => d.id === s.selectedDoc!.id) ?? null
+            s.selectedDoc && clean.some((d) => d.id === s.selectedDoc!.id)
+              ? clean.find((d) => d.id === s.selectedDoc!.id) ?? null
               : null;
-          return { documents: docs, selectedDoc: selected };
+          return { documents: clean, selectedDoc: selected };
         }),
 
       removeDocument: (id) =>
@@ -205,6 +225,24 @@ export const useStore = create<Store>()(
         activeProvider: s.activeProvider,
         providers:      s.providers,
       }),
+      // Read-time guard: whatever was sitting in localStorage from an older
+      // build — before `content` was dropped from Document, before this
+      // validation existed at all — gets sanitized the instant it's loaded
+      // back in, before any component gets a chance to render it. This is
+      // what actually closes the race DocumentsHydrator couldn't: rehydration
+      // from localStorage happens synchronously on mount, the server fetch
+      // doesn't land until a tick later.
+      onRehydrateStorage: () => (state, error) => {
+        if (error || !state) return;
+        const before = state.documents?.length ?? 0;
+        state.documents = (state.documents ?? []).filter(isValidDocument);
+        if (before !== state.documents.length) {
+          console.warn(`[store] rehydrate: dropped ${before - state.documents.length} malformed document(s) from localStorage`);
+        }
+        if (state.selectedDoc && !isValidDocument(state.selectedDoc)) {
+          state.selectedDoc = null;
+        }
+      },
     }
   )
 );
